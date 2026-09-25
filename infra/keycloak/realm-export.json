@@ -1,0 +1,88 @@
+{
+  "realm": "documind",
+  "enabled": true,
+  "displayName": "DocuMind",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "admin",  "description": "Full access to all resources" },
+      { "name": "editor", "description": "Can upload and manage documents" },
+      { "name": "viewer", "description": "Read-only access" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "documind-gateway",
+      "name": "DocuMind Gateway",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dev-secret-change-me",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:8081/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:8081"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "documind-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ],
+      "defaultClientScopes": ["profile", "email", "roles"]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@documind.local",
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "editor",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "editor@documind.local",
+      "firstName": "Editor",
+      "lastName": "User",
+      "credentials": [{ "type": "password", "value": "editor", "temporary": false }],
+      "realmRoles": ["editor"]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "viewer@documind.local",
+      "firstName": "Viewer",
+      "lastName": "User",
+      "credentials": [{ "type": "password", "value": "viewer", "temporary": false }],
+      "realmRoles": ["viewer"]
+    }
+  ]
+}

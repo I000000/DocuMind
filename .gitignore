@@ -16,9 +16,13 @@ node_modules/
 .next/
 out/
 
-# Env
+# Env / secrets
 .env
 .env.local
+.env.*.local
+.env*.ps1
+!.env.example
+!**/.env.example
 
 # IDE
 .idea/
@@ -29,3 +33,9 @@ out/
 
 # Docker
 *.log
+
+# Docker Compose env
+infra/.env
+
+# Keycloak secrets
+infra/keycloak/realm-export.local.json

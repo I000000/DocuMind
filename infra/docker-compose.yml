@@ -1,0 +1,77 @@
+name: documind
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: documind-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-documind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-documind}
+      POSTGRES_DB: ${POSTGRES_DB:-documind}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-documind} -d ${POSTGRES_DB:-documind}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - documind
+
+  redis:
+    image: redis:7-alpine
+    container_name: documind-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - documind
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: documind-keycloak
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      # ---------- Bootstrap admin ----------
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+
+      # ---------- Database ----------
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-documind}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-documind}
+
+      # ---------- HTTP ----------
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - documind
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  documind:
+    driver: bridge
