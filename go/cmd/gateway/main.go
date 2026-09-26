@@ -14,9 +14,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/I000000/DocuMind/internal/auth"
 	"github.com/I000000/DocuMind/internal/config"
 	"github.com/I000000/DocuMind/internal/health"
 	"github.com/I000000/DocuMind/internal/logger"
+	"github.com/I000000/DocuMind/internal/middleware"
 	"github.com/I000000/DocuMind/internal/server"
 )
 
@@ -24,7 +26,6 @@ func main() {
 	// ---------- Config ----------
 	cfg, err := config.Load()
 	if err != nil {
-		// Логгера ещё нет, падаем на стандартный
 		panic("config error: " + err.Error())
 	}
 
@@ -57,13 +58,22 @@ func main() {
 		log.Warn("redis ping failed, continuing without cache", zap.Error(err))
 	}
 
+	// ---------- OIDC ----------
+	oidcProvider, err := auth.NewProvider(rootCtx, cfg.OIDC.IssuerURL, cfg.OIDC.Audience)
+	if err != nil {
+		log.Fatal("failed to init OIDC provider", zap.Error(err))
+	}
+	log.Info("OIDC provider initialized",
+		zap.String("issuer", cfg.OIDC.IssuerURL),
+		zap.String("audience", cfg.OIDC.Audience),
+	)
+	authMiddleware := auth.NewMiddleware(oidcProvider, log)
+
 	// ---------- Health checks ----------
 	healthHandler := health.NewHandler().
 		Register("redis", func(ctx context.Context) error {
 			return rdb.Ping(ctx).Err()
 		})
-
-	// TODO: добавить postgres, grpc-клиенты, kafka producer
 
 	// ---------- Gin ----------
 	if cfg.App.Env == "production" {
@@ -71,22 +81,59 @@ func main() {
 	}
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.RequestID())
+	router.Use(middleware.RateLimit(rdb, cfg.RateLimit.RPS, cfg.RateLimit.Window, log))
 
-	// TODO: request ID, otelgin, metrics, rate limit, auth, RBAC
-
+	// ---------- Public routes ----------
 	router.GET("/health/live", healthHandler.Live)
 	router.GET("/health/ready", healthHandler.Ready)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Заглушка
-	router.GET("/api/v1/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"pong": true})
-	})
+	// ---------- API v1 ----------
+	v1 := router.Group("/api/v1")
+	{
+		// public
+		v1.GET("/ping", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"pong": true})
+		})
+
+		// protected — требуют аутентификации
+		protected := v1.Group("")
+		protected.Use(authMiddleware.Authenticate())
+		{
+			// любой авторизованный
+			protected.GET("/me", func(c *gin.Context) {
+				user := auth.MustUserFromContext(c.Request.Context())
+				c.JSON(http.StatusOK, gin.H{
+					"subject":            user.Subject,
+					"email":              user.Email,
+					"preferred_username": user.PreferredUsername,
+					"roles":              user.Roles,
+				})
+			})
+
+			// только admin
+			protected.GET("/admin/ping",
+				middleware.RequireAnyRole("admin"),
+				func(c *gin.Context) {
+					c.JSON(http.StatusOK, gin.H{"admin": true})
+				},
+			)
+
+			// admin или editor
+			protected.GET("/editor/ping",
+				middleware.RequireAnyRole("admin", "editor"),
+				func(c *gin.Context) {
+					c.JSON(http.StatusOK, gin.H{"editor": true})
+				},
+			)
+		}
+	}
 
 	// ---------- HTTP Server ----------
 	httpSrv := server.New(":"+cfg.App.ServerPort, router, log)
 
-	// ---------- pprof Server (отдельный порт) ----------
+	// ---------- pprof Server ----------
 	pprofSrv := startPprof(cfg.App.PprofPort, log)
 
 	// ---------- Start ----------
@@ -118,7 +165,6 @@ func main() {
 	log.Info("gateway stopped")
 }
 
-// startPprof поднимает pprof на отдельном порту
 func startPprof(port string, log *zap.Logger) *server.HTTPServer {
 	if port == "" {
 		return nil
