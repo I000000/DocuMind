@@ -4,8 +4,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from pydantic import BaseModel
+
 from documind_worker.logging import get_logger
-from documind_worker.processing import chunking, embeddings, extract
+from documind_worker.processing import chunking, embeddings, extract, reranker
 from documind_worker.storage import pg
 
 logger = get_logger(__name__)
@@ -70,3 +72,57 @@ async def process_file(file: UploadFile = File(...)):
         raise HTTPException(500, f"processing failed: {e}")
     finally:
         tmp_path.unlink(missing_ok=True)
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+@router.post("/search")
+async def search(req: SearchRequest):
+    """
+    Двухступенчатый поиск:
+    1. Векторный поиск top-20 кандидатов из pgvector.
+    2. Cross-encoder пересчитывает релевантность и оставляет top_k.
+    """
+    query_vector = embeddings.embed_query(req.query)
+
+    # Шаг 1: широкий векторный поиск
+    async with pg.pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                dc.document_id,
+                dc.chunk_index,
+                dc.page,
+                dc.content,
+                1 - (dc.embedding <=> $1) AS vec_score,
+                d.title
+            FROM document_chunks dc
+            JOIN documents d ON d.id = dc.document_id
+            ORDER BY dc.embedding <=> $1
+            LIMIT 20
+            """,
+            query_vector,
+        )
+
+    if not rows:
+        return {"query": req.query, "results": []}
+
+    # Шаг 2: reranker
+    passages = [row["content"] for row in rows]
+    ranked = reranker.rerank(req.query, passages, top_k=req.top_k)
+
+    results = []
+    for orig_idx, rerank_score in ranked:
+        row = rows[orig_idx]
+        results.append({
+            "title": row["title"],
+            "chunk_index": row["chunk_index"],
+            "page": row["page"],
+            "score": float(rerank_score),
+            "vec_score": float(row["vec_score"]),
+            "content": row["content"][:300],
+        })
+
+    return {"query": req.query, "results": results}
