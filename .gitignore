@@ -1,20 +1,31 @@
 # Go
-go/gen/
 go/bin/
+go/gen/
 *.test
 *.out
+coverage.out
 
 # Python
 __pycache__/
 *.py[cod]
-.venv/
+*.pyo
+*.pyd
+**/.venv/
+**/venv/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+.python-version
 
 # Node
 node_modules/
 .next/
 out/
+dist/
+.env*.local
 
 # Env / secrets
 .env
@@ -27,15 +38,30 @@ out/
 # IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+.vs/
 
 # OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
 
 # Docker
-*.log
+docker-compose.override.yml
 
-# Docker Compose env
-infra/.env
+# Secrets
+*.key
+*.pem
+*.p12
+id_rsa*
+credentials.json
+secrets.yaml
+secrets.yml
 
-# Keycloak secrets
+# Keycloak local overrides
 infra/keycloak/realm-export.local.json
+infra/.env
