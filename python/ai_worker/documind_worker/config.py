@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     minio_bucket: str = "documents"
     minio_use_ssl: bool = False
 
+    # Redis
+    redis_addr: str = "localhost:6379"
+    redis_password: str = ""
+    redis_db: int = 0
+
+    # Processing
+    max_retries: int = 5
+    idempotency_ttl_hours: int = 24
+
     # Embeddings
     embedding_model: str = "intfloat/multilingual-e5-large"
     embedding_device: str = "cuda"  # или "cpu"

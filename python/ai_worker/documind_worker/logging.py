@@ -11,6 +11,10 @@ def setup_logging(level: str = "INFO") -> None:
         level=getattr(logging, level.upper()),
     )
 
+    logging.getLogger("aiokafka").setLevel(logging.WARNING)
+    logging.getLogger("aiokafka.consumer.group_coordinator").setLevel(logging.WARNING)
+    logging.getLogger("aiokafka.cluster").setLevel(logging.WARNING)
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

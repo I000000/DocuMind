@@ -22,6 +22,7 @@ dependencies = [
     "httpx>=0.27",
     "pypdf>=5.1",
     "python-multipart>=0.0.20",
+    "redis[hiredis]>=5.2",
 ]
 
 [project.optional-dependencies]
