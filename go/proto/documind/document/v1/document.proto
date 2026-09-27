@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package documind.document.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// DocumentService — внутренний API для работы с документами.
+// Используется Gateway'ем для проксирования запросов к Document Service.
+service DocumentService {
+  // GetDocument возвращает метаданные документа по ID.
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse);
+
+  // ListDocuments возвращает постраничный список документов.
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+
+  // DeleteDocument удаляет документ и все его чанки.
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+}
+
+enum DocumentStatus {
+  DOCUMENT_STATUS_UNSPECIFIED = 0;
+  DOCUMENT_STATUS_PENDING = 1;
+  DOCUMENT_STATUS_PROCESSING = 2;
+  DOCUMENT_STATUS_READY = 3;
+  DOCUMENT_STATUS_FAILED = 4;
+}
+
+message Document {
+  string id = 1;
+  string title = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  DocumentStatus status = 5;
+  string error_message = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message GetDocumentRequest {
+  string id = 1;
+}
+
+message GetDocumentResponse {
+  Document document = 1;
+}
+
+message ListDocumentsRequest {
+  int32 page_size = 1;      // default 20, max 100
+  string page_token = 2;    // opaque cursor
+  DocumentStatus status = 3; // optional filter
+}
+
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message DeleteDocumentRequest {
+  string id = 1;
+}
+
+message DeleteDocumentResponse {
+  bool deleted = 1;
+}
