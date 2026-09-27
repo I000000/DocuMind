@@ -15,7 +15,9 @@ class Settings(BaseSettings):
     # Kafka
     kafka_brokers: str = "localhost:9092"
     kafka_topic_documents: str = "documind.documents.v1"
+    kafka_topic_dlq: str = "documind.documents.v1.dlq"
     kafka_group_id: str = "ai-worker-group"
+    kafka_consumer_workers: int = 3
 
     # PostgreSQL
     db_host: str = "localhost"
