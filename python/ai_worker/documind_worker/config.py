@@ -12,12 +12,20 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     server_port: int = 8002
 
+    # Testing / debugging
+    simulate_transient_error: bool = False
+
     # Kafka
     kafka_brokers: str = "localhost:9092"
     kafka_topic_documents: str = "documind.documents.v1"
     kafka_topic_dlq: str = "documind.documents.v1.dlq"
     kafka_group_id: str = "ai-worker-group"
     kafka_consumer_workers: int = 3
+
+    # Retry
+    max_retries: int = 5
+    retry_base_delay: float = 1.0
+    retry_max_delay: float = 30.0
 
     # PostgreSQL
     db_host: str = "localhost"
