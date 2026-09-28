@@ -17,6 +17,7 @@ type Config struct {
 	MinIO     MinIOConfig
 	GRPC      GRPCConfig
 	OTel      OTelConfig
+	Document  DocumentConfig
 }
 
 type AppConfig struct {
@@ -81,13 +82,19 @@ type MinIOConfig struct {
 
 type GRPCConfig struct {
 	SearchServiceAddr   string `env:"SEARCH_SERVICE_GRPC_ADDR" envDefault:"localhost:50051"`
-	DocumentServiceAddr string `env:"DOCUMENT_SERVICE_GRPC_ADDR" envDefault:"localhost:50052"`
+	DocumentServiceAddr string `env:"DOCUMENT_SERVICE_GRPC_ADDR" envDefault:"localhost:9090"`
 }
 
 type OTelConfig struct {
 	Endpoint     string  `env:"OTEL_EXPORTER_OTLP_ENDPOINT" envDefault:"http://localhost:4318"`
 	ServiceName  string  `env:"OTEL_SERVICE_NAME" envDefault:"documind-gateway"`
 	SamplerRatio float64 `env:"OTEL_SAMPLER_RATIO" envDefault:"1.0"`
+}
+
+type DocumentConfig struct {
+	GRPCPort       string `env:"DOCUMENT_GRPC_PORT" envDefault:"9090"`
+	HTTPPort       string `env:"DOCUMENT_HTTP_PORT" envDefault:"8082"`
+	MaxUploadBytes int64  `env:"DOCUMENT_MAX_UPLOAD_BYTES" envDefault:"52428800"`
 }
 
 // Load читает конфиг из env и валидирует его.
