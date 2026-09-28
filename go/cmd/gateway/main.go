@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -23,6 +24,8 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load(".env")
+
 	// ---------- Config ----------
 	cfg, err := config.Load()
 	if err != nil {
