@@ -18,6 +18,7 @@ type Config struct {
 	GRPC      GRPCConfig
 	OTel      OTelConfig
 	Document  DocumentConfig
+	Outbox    OutboxConfig
 }
 
 type AppConfig struct {
@@ -97,6 +98,14 @@ type DocumentConfig struct {
 	MaxUploadBytes int64  `env:"DOCUMENT_MAX_UPLOAD_BYTES" envDefault:"52428800"`
 }
 
+type OutboxConfig struct {
+	PollInterval time.Duration `env:"OUTBOX_POLL_INTERVAL" envDefault:"1s"`
+	BatchSize    int           `env:"OUTBOX_BATCH_SIZE" envDefault:"50"`
+	MaxRetries   int           `env:"OUTBOX_MAX_RETRIES" envDefault:"10"`
+	BackoffBase  time.Duration `env:"OUTBOX_BACKOFF_BASE" envDefault:"1s"`
+	BackoffMax   time.Duration `env:"OUTBOX_BACKOFF_MAX" envDefault:"5m"`
+}
+
 // Load читает конфиг из env и валидирует его.
 func Load() (*Config, error) {
 	cfg := &Config{}
@@ -123,6 +132,12 @@ func (c *Config) validate() error {
 	}
 	if c.OTel.SamplerRatio < 0 || c.OTel.SamplerRatio > 1 {
 		return fmt.Errorf("OTEL_SAMPLER_RATIO must be in [0,1]")
+	}
+	if c.Outbox.BatchSize <= 0 {
+		return fmt.Errorf("OUTBOX_BATCH_SIZE must be positive")
+	}
+	if c.Outbox.MaxRetries <= 0 {
+		return fmt.Errorf("OUTBOX_MAX_RETRIES must be positive")
 	}
 	return nil
 }

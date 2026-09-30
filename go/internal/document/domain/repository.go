@@ -48,6 +48,9 @@ type OutboxMarker interface {
 
 	// MarkFailed возвращает событие в pending с next_retry_at для backoff.
 	MarkFailed(ctx context.Context, id int64, errMsg string, nextRetryAt time.Time) error
+
+	// MarkDead помечает событие как окончательно провалившееся после исчерпания retry.
+	MarkDead(ctx context.Context, id int64, errMsg string) error
 }
 
 // OutboxRepository — полный набор операций с outbox.

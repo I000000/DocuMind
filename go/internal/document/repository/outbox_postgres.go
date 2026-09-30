@@ -138,3 +138,20 @@ func (r *OutboxPostgresRepository) MarkFailed(
 	}
 	return nil
 }
+
+// MarkDead переводит событие в терминальный статус 'dead' после исчерпания retry.
+// Такие события требуют ручного разбора (replay из Kafka-консоли или фикса бага).
+func (r *OutboxPostgresRepository) MarkDead(ctx context.Context, id int64, errMsg string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE outbox
+		SET status = 'dead',
+		    retry_count = retry_count + 1,
+		    last_error = $1
+		WHERE id = $2
+	`, errMsg, id)
+	if err != nil {
+		return fmt.Errorf("mark dead: %w", err)
+	}
+	r.logger.Warn("outbox_event_dead", zap.Int64("id", id), zap.String("error", errMsg))
+	return nil
+}
