@@ -23,6 +23,7 @@ dependencies = [
     "pypdf>=5.1",
     "python-multipart>=0.0.20",
     "redis[hiredis]>=5.2",
+    "prometheus-client>=0.21",
 ]
 
 [project.optional-dependencies]

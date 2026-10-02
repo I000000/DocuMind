@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, TopicPartition
 from pydantic import ValidationError
 
+from documind_worker.api import metrics
 from documind_worker.config import settings
 from documind_worker.kafka import idempotency
 from documind_worker.kafka.producer import publish
@@ -137,6 +139,7 @@ class DocumentConsumer:
         except Exception as e:
             # Сюда попадаем после исчерпания retry. Документ остаётся в статусе 'processing'
             logger.exception("retries_exhausted", event_id=event_id, document_id=document_id)
+            metrics.documents_processed_total.labels(status="failed").inc()
             await self._send_to_dlq(
                 msg.value, event_id, document_id, str(e),
                 retry_count=settings.max_retries,
@@ -210,6 +213,9 @@ class DocumentConsumer:
         bucket = event.payload.storage.bucket
         key = event.payload.storage.key
 
+        start_time = time.monotonic()
+
+
         await pg.create_document(
             document_id=document_id,
             title=event.payload.title,
@@ -245,13 +251,24 @@ class DocumentConsumer:
             await pg.update_document_status(document_id, "ready")
             logger.info("document_processed", document_id=document_id, chunks=inserted)
 
+            metrics.documents_processed_total.labels(status="success").inc()
+            metrics.chunks_created_total.inc(len(chunks))
+            metrics.chunks_embedded_total.inc(len(vectors))
+            metrics.processing_duration_seconds.observe(time.monotonic() - start_time)
+
         except PermanentError:
             await pg.update_document_status(document_id, "failed", "permanent error")
+
+            metrics.documents_processed_total.labels(status="permanent_error").inc()
+            metrics.processing_duration_seconds.observe(time.monotonic() - start_time)
+
             raise
         except Exception as e:
             # Transient error — НЕ помечаем 'failed', чтобы при retry можно было
             # перезаписать чанки. Статус останется 'processing' до исхода retry.
             logger.warning("processing_error_will_retry", document_id=document_id, error=str(e))
+            # Метрику здесь НЕ увеличиваем — retry может закончиться успехом.
+            # Метрика будет в _handle_message, когда исчерпаются все попытки.
             raise
         finally:
             tmp_path.unlink(missing_ok=True)

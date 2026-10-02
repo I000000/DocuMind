@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-from documind_worker.api import health, test
+from documind_worker.api import health, metrics, test
 from documind_worker.config import settings
 from documind_worker.kafka import consumer, idempotency, producer
 from documind_worker.logging import get_logger, setup_logging
@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="DocuMind AI Worker", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(test.router, prefix="/test", tags=["test"])
+app.add_api_route("/metrics", metrics.metrics_endpoint, methods=["GET"], include_in_schema=False)
 
 
 if __name__ == "__main__":
