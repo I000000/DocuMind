@@ -127,16 +127,18 @@ func (s *CreatorService) Create(ctx context.Context, input CreateInput) (CreateO
 		RequestID:   input.RequestID,
 	})
 	if err != nil {
-		// Компенсация: удаляем загруженный объект. Best-effort — orphan-файлы
-		// в MinIO не наносят вреда и могут быть очищены отдельным job'ом.
-		if delErr := s.storage.Delete(ctx, objectKey); delErr != nil {
+		// Компенсация в отдельном контексте.
+		compCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if delErr := s.storage.Delete(compCtx, objectKey); delErr != nil {
 			s.logger.Warn("compensation_failed",
 				zap.String("document_id", documentID),
 				zap.String("object_key", objectKey),
 				zap.Error(delErr),
 			)
 		}
-		return CreateOutput{}, fmt.Errorf("%w: %v", ErrPersistFailed, err)
+		return CreateOutput{}, fmt.Errorf("%w: %w", ErrPersistFailed, err)
 	}
 
 	s.logger.Info("document_created",

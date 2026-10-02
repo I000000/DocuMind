@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
 
 	"github.com/I000000/DocuMind/internal/auth"
@@ -103,6 +104,16 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
+	router.Use(otelgin.Middleware(
+		cfg.OTel.ServiceName,
+		otelgin.WithFilter(func(r *http.Request) bool {
+			switch r.URL.Path {
+			case "/metrics", "/health/live", "/health/ready":
+				return false
+			}
+			return true
+		}),
+	))
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.RateLimit(rdb, cfg.RateLimit.RPS, cfg.RateLimit.Window, log))

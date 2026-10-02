@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"go.uber.org/zap"
@@ -16,6 +17,16 @@ import (
 // в Mapper, который сам решает статус и формат ответа.
 func NewErrorMapper(logger *zap.Logger) *httperr.Mapper {
 	return httperr.New(logger,
+		httperr.Rule{
+			Err:     context.Canceled,
+			Status:  499,
+			Message: "client closed request",
+		},
+		httperr.Rule{
+			Err:     service.ErrInvalidInput,
+			Status:  http.StatusBadRequest,
+			Message: "invalid input",
+		},
 		httperr.Rule{
 			Err:     service.ErrInvalidInput,
 			Status:  http.StatusBadRequest,

@@ -170,7 +170,16 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
-	router.Use(otelgin.Middleware(cfg.OTel.ServiceName))
+	router.Use(otelgin.Middleware(
+		cfg.OTel.ServiceName,
+		otelgin.WithFilter(func(r *http.Request) bool {
+			switch r.URL.Path {
+			case "/metrics", "/health/live", "/health/ready":
+				return false
+			}
+			return true
+		}),
+	))
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 
