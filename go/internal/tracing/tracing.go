@@ -62,6 +62,19 @@ func ExtractFromCarrier(ctx context.Context, carrier map[string]string) context.
 	return otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(carrier))
 }
 
+// InjectToCarrier извлекает trace context из ctx и возвращает как map.
+// Используется при создании outbox-события: traceparent сохраняется в БД,
+// чтобы outbox-worker мог продолжить span при публикации в Kafka.
+func InjectToCarrier(ctx context.Context) map[string]string {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	out := make(map[string]string, len(carrier))
+	for k, v := range carrier {
+		out[k] = v
+	}
+	return out
+}
+
 // stripScheme убирает "http://" или "https://" из URL — otlptracehttp
 // ожидает host:port без схемы.
 func stripScheme(endpoint string) string {
