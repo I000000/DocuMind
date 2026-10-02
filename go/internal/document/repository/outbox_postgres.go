@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 
 	"github.com/I000000/DocuMind/internal/document/domain"
@@ -80,7 +81,7 @@ func (r *OutboxPostgresRepository) FetchPending(
 	}
 	_, err = tx.ExecContext(ctx, `
 		UPDATE outbox SET status = 'processing' WHERE id = ANY($1)
-	`, ids)
+	`, pq.Array(ids))
 	if err != nil {
 		return nil, fmt.Errorf("mark processing: %w", err)
 	}
