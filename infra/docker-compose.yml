@@ -157,6 +157,51 @@ services:
     networks:
       - documind
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: documind-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Web UI
+      - "4318:4318"     # OTLP HTTP
+      - "4317:4317"     # OTLP gRPC
+    networks:
+      - documind
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: documind-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - documind
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: documind-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - documind
+
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: documind-keycloak
@@ -193,6 +238,8 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   documind:
