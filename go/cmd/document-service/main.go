@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -34,10 +36,13 @@ import (
 	"github.com/I000000/DocuMind/internal/migrations"
 	"github.com/I000000/DocuMind/internal/minio"
 	"github.com/I000000/DocuMind/internal/server"
+	"github.com/I000000/DocuMind/internal/tracing"
 )
 
 func main() {
 	_ = godotenv.Load(".env")
+
+	_ = os.Setenv("OTEL_SERVICE_NAME", "documind-document-service")
 
 	// ---------- Config ----------
 	cfg, err := config.Load()
@@ -57,10 +62,26 @@ func main() {
 		zap.String("version", "dev"),
 	)
 
-	// ---------- Root context с отменой по сигналу ----------
+	// ---------- Context с отменой по сигналу ----------
 	rootCtx, stop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// ---------- Tracing ----------
+	shutdownTracer, err := tracing.InitTracer(rootCtx,
+		cfg.OTel.ServiceName,
+		cfg.OTel.Endpoint,
+		cfg.OTel.SamplerRatio,
+	)
+	if err != nil {
+		log.Fatal("tracer init failed", zap.Error(err))
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracer(ctx)
+	}()
+	log.Info("tracer initialized", zap.String("endpoint", cfg.OTel.Endpoint))
 
 	// ---------- PostgreSQL ----------
 	db, err := sqlx.Connect("postgres", cfg.Postgres.DSN())
@@ -149,6 +170,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
+	router.Use(otelgin.Middleware(cfg.OTel.ServiceName))
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 

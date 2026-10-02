@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -21,10 +22,13 @@ import (
 	"github.com/I000000/DocuMind/internal/logger"
 	"github.com/I000000/DocuMind/internal/middleware"
 	"github.com/I000000/DocuMind/internal/server"
+	"github.com/I000000/DocuMind/internal/tracing"
 )
 
 func main() {
 	_ = godotenv.Load(".env")
+
+	_ = os.Setenv("OTEL_SERVICE_NAME", "documind-gateway")
 
 	// ---------- Config ----------
 	cfg, err := config.Load()
@@ -48,6 +52,22 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// ---------- Tracing ----------
+	shutdownTracer, err := tracing.InitTracer(rootCtx,
+		cfg.OTel.ServiceName,
+		cfg.OTel.Endpoint,
+		cfg.OTel.SamplerRatio,
+	)
+	if err != nil {
+		log.Fatal("tracer init failed", zap.Error(err))
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracer(ctx)
+	}()
+	log.Info("tracer initialized", zap.String("endpoint", cfg.OTel.Endpoint))
 
 	// ---------- Redis ----------
 	rdb := redis.NewClient(&redis.Options{
