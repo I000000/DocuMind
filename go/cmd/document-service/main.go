@@ -16,12 +16,17 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
+	documentv1 "github.com/I000000/DocuMind/gen/documind/document/v1"
 	"github.com/I000000/DocuMind/internal/config"
+	documentgrpc "github.com/I000000/DocuMind/internal/document/grpc"
 	"github.com/I000000/DocuMind/internal/document/handler"
 	"github.com/I000000/DocuMind/internal/document/repository"
 	"github.com/I000000/DocuMind/internal/document/service"
 	"github.com/I000000/DocuMind/internal/document/worker"
+	"github.com/I000000/DocuMind/internal/grpcserver"
 	"github.com/I000000/DocuMind/internal/health"
 	"github.com/I000000/DocuMind/internal/kafka"
 	"github.com/I000000/DocuMind/internal/logger"
@@ -111,6 +116,15 @@ func main() {
 	errMapper := handler.NewErrorMapper(log)
 	docHandler := handler.New(creatorService, cfg.Document.MaxUploadBytes, errMapper, log)
 
+	// ---------- gRPC server ----------
+	grpcSrv := grpcserver.New(":"+cfg.Document.GRPCPort, log)
+	docGRPCServer := documentgrpc.NewServer(docRepo)
+	grpcSrv.Register(func(s *grpc.Server) {
+		documentv1.RegisterDocumentServiceServer(s, docGRPCServer)
+		reflection.Register(s) // для grpcurl в dev; отключить в prod
+	})
+	grpcErr := grpcSrv.Start()
+
 	// ---------- Outbox worker (фоновая горутина) ----------
 	outboxWorker := worker.NewOutboxWorker(outboxRepo, kafkaProducer, cfg.Outbox, log)
 	workerDone := make(chan struct{})
@@ -167,6 +181,10 @@ func main() {
 		if err != nil {
 			log.Fatal("http server failed", zap.Error(err))
 		}
+	case err := <-grpcErr:
+		if err != nil {
+			log.Fatal("grpc server failed", zap.Error(err))
+		}
 	}
 
 	// ---------- Graceful shutdown ----------
@@ -176,6 +194,7 @@ func main() {
 	if err := httpSrv.Shutdown(shutdownCtx, 10*time.Second); err != nil {
 		log.Error("http shutdown error", zap.Error(err))
 	}
+	grpcSrv.Shutdown(5 * time.Second)
 	if pprofSrv != nil {
 		if err := pprofSrv.Shutdown(shutdownCtx, 3*time.Second); err != nil {
 			log.Error("pprof shutdown error", zap.Error(err))
