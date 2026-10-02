@@ -95,6 +95,7 @@ type OTelConfig struct {
 type DocumentConfig struct {
 	GRPCPort       string `env:"DOCUMENT_GRPC_PORT" envDefault:"9090"`
 	HTTPPort       string `env:"DOCUMENT_HTTP_PORT" envDefault:"8082"`
+	PprofPort      string `env:"DOCUMENT_PPROF_PORT" envDefault:"6062"`
 	MaxUploadBytes int64  `env:"DOCUMENT_MAX_UPLOAD_BYTES" envDefault:"52428800"`
 }
 
