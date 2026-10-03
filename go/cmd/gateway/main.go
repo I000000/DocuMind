@@ -127,6 +127,15 @@ func main() {
 		log.Fatal("failed to create upload proxy", zap.Error(err))
 	}
 
+	// ---------- Document gRPC client ----------
+	docClient, err := gatewayproxy.NewDocumentClient(cfg.Clients.DocumentServiceGRPCAddr, log)
+	if err != nil {
+		log.Fatal("failed to create document client", zap.Error(err))
+	}
+	defer func() { _ = docClient.Close() }()
+
+	docHandler := gatewayproxy.NewDocumentHandler(docClient, log)
+
 	// ---------- API v1 ----------
 	v1 := router.Group("/api/v1")
 	{
@@ -142,6 +151,20 @@ func main() {
 			protected.POST("/documents",
 				middleware.RequireAnyRole("admin", "editor"),
 				gin.WrapH(uploadProxy),
+			)
+
+			// CRUD via gRPC.
+			protected.GET("/documents",
+				middleware.RequireAnyRole("admin", "editor", "viewer"),
+				docHandler.List,
+			)
+			protected.GET("/documents/:id",
+				middleware.RequireAnyRole("admin", "editor", "viewer"),
+				docHandler.Get,
+			)
+			protected.DELETE("/documents/:id",
+				middleware.RequireAnyRole("admin", "editor"),
+				docHandler.Delete,
 			)
 
 			// любой авторизованный
