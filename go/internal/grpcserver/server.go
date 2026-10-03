@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -26,13 +27,20 @@ func New(
 	chain := []grpc.UnaryServerInterceptor{
 		RecoveryInterceptor(logger),
 		LoggingInterceptor(logger),
-		TracingInterceptor(),
 		MetricsInterceptor(),
 	}
 	chain = append(chain, extraInterceptors...)
 
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(chain...),
+		// otelgrpc.NewServerHandler() извлекает traceparent из incoming
+		// metadata и помещает его в context. После этого tracer.Start
+		// в TracingInterceptor создаёт child span от клиента.
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
+
 	return &Server{
-		grpc:   grpc.NewServer(grpc.ChainUnaryInterceptor(chain...)),
+		grpc:   grpcServer,
 		addr:   addr,
 		logger: logger,
 	}
