@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/pprof"
-	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -41,9 +40,7 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load(".env")
-
-	_ = os.Setenv("OTEL_SERVICE_NAME", "documind-document-service")
+	_ = godotenv.Load(".env.document-service")
 
 	// ---------- Config ----------
 	cfg, err := config.Load()
@@ -156,7 +153,7 @@ func main() {
 		"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
 	)
 
-	grpcSrv := grpcserver.New(":"+cfg.Document.GRPCPort, log,
+	grpcSrv := grpcserver.New(":"+cfg.Server.GRPCPort, log,
 		authInterceptor.Unary(),
 	)
 
@@ -220,10 +217,10 @@ func main() {
 	}
 
 	// ---------- HTTP server ----------
-	httpSrv := server.New(":"+cfg.Document.HTTPPort, router, log)
+	httpSrv := server.New(":"+cfg.Server.HTTPPort, router, log)
 
 	// ---------- pprof server ----------
-	pprofSrv := startPprof(cfg.Document.PprofPort, log)
+	pprofSrv := startPprof(cfg.Server.PprofPort, log)
 
 	// ---------- Start ----------
 	httpErr := httpSrv.Start()

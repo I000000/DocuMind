@@ -29,11 +29,9 @@ dist/
 
 # Env / secrets
 .env
-.env.local
-.env.*.local
-.env*.ps1
+.env.*
 !.env.example
-!**/.env.example
+!.env.*.example
 
 # IDE
 .idea/

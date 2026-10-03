@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/pprof"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -28,9 +27,7 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load(".env")
-
-	_ = os.Setenv("OTEL_SERVICE_NAME", "documind-gateway")
+	_ = godotenv.Load(".env.gateway")
 
 	// ---------- Config ----------
 	cfg, err := config.Load()
@@ -125,7 +122,7 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// ---------- Upload proxy to document-service ----------
-	uploadProxy, err := gatewayproxy.NewUploadProxy(cfg.GRPC.DocumentServiceURL, log)
+	uploadProxy, err := gatewayproxy.NewUploadProxy(cfg.Clients.DocumentServiceURL, log)
 	if err != nil {
 		log.Fatal("failed to create upload proxy", zap.Error(err))
 	}
@@ -177,10 +174,10 @@ func main() {
 	}
 
 	// ---------- HTTP Server ----------
-	httpSrv := server.New(":"+cfg.App.ServerPort, router, log)
+	httpSrv := server.New(":"+cfg.Server.HTTPPort, router, log)
 
 	// ---------- pprof Server ----------
-	pprofSrv := startPprof(cfg.App.PprofPort, log)
+	pprofSrv := startPprof(cfg.Server.PprofPort, log)
 
 	// ---------- Start ----------
 	httpErr := httpSrv.Start()

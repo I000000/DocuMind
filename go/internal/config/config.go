@@ -7,25 +7,48 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// Config — корневая конфигурация Go-сервисов DocuMind.
+//
+// Разделена по принципу "Servers vs Clients":
+//   - Server: порты, которые слушает сам сервис.
+//   - Clients: адреса других сервисов, которые он вызывает.
+//
+// Каждый сервис читает свой .env файл (.env.gateway, .env.document-service).
 type Config struct {
 	App       AppConfig
+	Server    ServerConfig
+	Clients   ClientsConfig
 	Postgres  PostgresConfig
 	Redis     RedisConfig
-	OIDC      OIDCConfig
-	RateLimit RateLimitConfig
 	Kafka     KafkaConfig
 	MinIO     MinIOConfig
-	GRPC      GRPCConfig
+	OIDC      OIDCConfig
 	OTel      OTelConfig
+	RateLimit RateLimitConfig
 	Document  DocumentConfig
 	Outbox    OutboxConfig
 }
 
+// AppConfig — общие настройки, одинаковые для всех сервисов.
 type AppConfig struct {
-	Env        string `env:"APP_ENV" envDefault:"development"`
-	LogLevel   string `env:"LOG_LEVEL" envDefault:"info"`
-	ServerPort string `env:"SERVER_PORT" envDefault:"8080"`
-	PprofPort  string `env:"PPROF_PORT" envDefault:"6060"`
+	Env      string `env:"APP_ENV" envDefault:"development"`
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
+}
+
+// ServerConfig — порты, которые слушает этот сервис.
+type ServerConfig struct {
+	HTTPPort  string `env:"HTTP_PORT" envDefault:"8080"`
+	GRPCPort  string `env:"GRPC_PORT" envDefault:"9090"`
+	PprofPort string `env:"PPROF_PORT" envDefault:"6060"`
+}
+
+// ClientsConfig — адреса других сервисов, которые вызываем.
+type ClientsConfig struct {
+	DocumentServiceGRPCAddr string `env:"DOCUMENT_SERVICE_GRPC_ADDR" envDefault:"localhost:9090"`
+	SearchServiceGRPCAddr   string `env:"SEARCH_SERVICE_GRPC_ADDR" envDefault:"localhost:50051"`
+
+	// DocumentServiceURL — HTTP URL document-service для проксирования upload.
+	DocumentServiceURL string `env:"DOCUMENT_SERVICE_URL" envDefault:"http://localhost:8082"`
 }
 
 type PostgresConfig struct {
@@ -41,6 +64,7 @@ type PostgresConfig struct {
 	ConnMaxIdleTime time.Duration `env:"DB_CONN_MAX_IDLE_TIME" envDefault:"5m"`
 }
 
+// DSN собирает строку подключения для lib/pq.
 func (p PostgresConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -52,19 +76,6 @@ type RedisConfig struct {
 	Addr     string `env:"REDIS_ADDR,required"`
 	Password string `env:"REDIS_PASSWORD"`
 	DB       int    `env:"REDIS_DB" envDefault:"0"`
-}
-
-type OIDCConfig struct {
-	IssuerURL    string        `env:"OIDC_ISSUER_URL,required"`
-	ClientID     string        `env:"OIDC_CLIENT_ID,required"`
-	Audience     string        `env:"OIDC_AUDIENCE,required"`
-	JWKSCacheTTL time.Duration `env:"OIDC_JWKS_CACHE_TTL" envDefault:"15m"`
-}
-
-type RateLimitConfig struct {
-	RPS    int           `env:"RATE_LIMIT_RPS" envDefault:"50"`
-	Burst  int           `env:"RATE_LIMIT_BURST" envDefault:"100"`
-	Window time.Duration `env:"RATE_LIMIT_WINDOW" envDefault:"1s"`
 }
 
 type KafkaConfig struct {
@@ -81,23 +92,27 @@ type MinIOConfig struct {
 	UseSSL    bool   `env:"MINIO_USE_SSL" envDefault:"false"`
 }
 
-type GRPCConfig struct {
-	SearchServiceAddr   string `env:"SEARCH_SERVICE_GRPC_ADDR" envDefault:"localhost:50051"`
-	DocumentServiceAddr string `env:"DOCUMENT_SERVICE_GRPC_ADDR" envDefault:"localhost:9090"`
-	DocumentServiceURL  string `env:"DOCUMENT_SERVICE_URL" envDefault:"http://localhost:8082"`
+type OIDCConfig struct {
+	IssuerURL    string        `env:"OIDC_ISSUER_URL,required"`
+	ClientID     string        `env:"OIDC_CLIENT_ID,required"`
+	Audience     string        `env:"OIDC_AUDIENCE,required"`
+	JWKSCacheTTL time.Duration `env:"OIDC_JWKS_CACHE_TTL" envDefault:"15m"`
 }
 
 type OTelConfig struct {
 	Endpoint     string  `env:"OTEL_EXPORTER_OTLP_ENDPOINT" envDefault:"http://localhost:4318"`
-	ServiceName  string  `env:"OTEL_SERVICE_NAME" envDefault:"documind-gateway"`
+	ServiceName  string  `env:"OTEL_SERVICE_NAME,required"`
 	SamplerRatio float64 `env:"OTEL_SAMPLER_RATIO" envDefault:"1.0"`
 }
 
+type RateLimitConfig struct {
+	RPS    int           `env:"RATE_LIMIT_RPS" envDefault:"50"`
+	Burst  int           `env:"RATE_LIMIT_BURST" envDefault:"100"`
+	Window time.Duration `env:"RATE_LIMIT_WINDOW" envDefault:"1s"`
+}
+
 type DocumentConfig struct {
-	GRPCPort       string `env:"DOCUMENT_GRPC_PORT" envDefault:"9090"`
-	HTTPPort       string `env:"DOCUMENT_HTTP_PORT" envDefault:"8082"`
-	PprofPort      string `env:"DOCUMENT_PPROF_PORT" envDefault:"6062"`
-	MaxUploadBytes int64  `env:"DOCUMENT_MAX_UPLOAD_BYTES" envDefault:"52428800"`
+	MaxUploadBytes int64 `env:"DOCUMENT_MAX_UPLOAD_BYTES" envDefault:"52428800"`
 }
 
 type OutboxConfig struct {
@@ -108,7 +123,6 @@ type OutboxConfig struct {
 	BackoffMax   time.Duration `env:"OUTBOX_BACKOFF_MAX" envDefault:"5m"`
 }
 
-// Load читает конфиг из env и валидирует его.
 func Load() (*Config, error) {
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
@@ -125,21 +139,18 @@ func (c *Config) validate() error {
 		if c.Postgres.SSLMode == "disable" {
 			return fmt.Errorf("DB_SSLMODE must not be 'disable' in production")
 		}
-		if c.OIDC.IssuerURL == "" || c.OIDC.Audience == "" {
-			return fmt.Errorf("OIDC settings are required in production")
-		}
-	}
-	if c.RateLimit.RPS <= 0 || c.RateLimit.Burst <= 0 {
-		return fmt.Errorf("rate limit values must be positive")
-	}
-	if c.OTel.SamplerRatio < 0 || c.OTel.SamplerRatio > 1 {
-		return fmt.Errorf("OTEL_SAMPLER_RATIO must be in [0,1]")
 	}
 	if c.Outbox.BatchSize <= 0 {
 		return fmt.Errorf("OUTBOX_BATCH_SIZE must be positive")
 	}
 	if c.Outbox.MaxRetries <= 0 {
 		return fmt.Errorf("OUTBOX_MAX_RETRIES must be positive")
+	}
+	if c.Outbox.BackoffMax < c.Outbox.BackoffBase {
+		return fmt.Errorf("OUTBOX_BACKOFF_MAX must be >= OUTBOX_BACKOFF_BASE")
+	}
+	if c.OTel.SamplerRatio < 0 || c.OTel.SamplerRatio > 1 {
+		return fmt.Errorf("OTEL_SAMPLER_RATIO must be in [0,1]")
 	}
 	return nil
 }
