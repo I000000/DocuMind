@@ -53,7 +53,7 @@ func (m *Middleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		user := extractUser(idToken.Subject, rawClaims)
+		user := ExtractUser(idToken.Subject, rawClaims)
 
 		ctx := WithUser(c.Request.Context(), user)
 		c.Request = c.Request.WithContext(ctx)
@@ -64,7 +64,7 @@ func (m *Middleware) Authenticate() gin.HandlerFunc {
 }
 
 // extractUser парсит Keycloak-специфичные claims в User.
-func extractUser(subject string, claims map[string]interface{}) *User {
+func ExtractUser(subject string, claims map[string]interface{}) *User {
 	u := &User{Subject: subject}
 
 	if v, ok := claims["email"].(string); ok {

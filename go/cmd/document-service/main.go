@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	documentv1 "github.com/I000000/DocuMind/gen/documind/document/v1"
+	"github.com/I000000/DocuMind/internal/auth"
 	"github.com/I000000/DocuMind/internal/config"
 	documentgrpc "github.com/I000000/DocuMind/internal/document/grpc"
 	"github.com/I000000/DocuMind/internal/document/handler"
@@ -66,6 +67,17 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// ---------- OIDC ----------
+	oidcProvider, err := auth.NewProvider(rootCtx, cfg.OIDC.IssuerURL, cfg.OIDC.Audience)
+	if err != nil {
+		log.Fatal("failed to init OIDC provider", zap.Error(err))
+	}
+	log.Info("OIDC provider initialized",
+		zap.String("issuer", cfg.OIDC.IssuerURL),
+		zap.String("audience", cfg.OIDC.Audience),
+	)
+	authMiddleware := auth.NewMiddleware(oidcProvider, log)
 
 	// ---------- Tracing ----------
 	shutdownTracer, err := tracing.InitTracer(rootCtx,
@@ -138,7 +150,16 @@ func main() {
 	docHandler := handler.New(creatorService, cfg.Document.MaxUploadBytes, errMapper, log)
 
 	// ---------- gRPC server ----------
-	grpcSrv := grpcserver.New(":"+cfg.Document.GRPCPort, log)
+	authInterceptor := grpcserver.NewAuthInterceptor(oidcProvider,
+		// Публичные методы: reflection для dev-режима.
+		"/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+		"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
+	)
+
+	grpcSrv := grpcserver.New(":"+cfg.Document.GRPCPort, log,
+		authInterceptor.Unary(),
+	)
+
 	docGRPCServer := documentgrpc.NewServer(docRepo)
 	grpcSrv.Register(func(s *grpc.Server) {
 		documentv1.RegisterDocumentServiceServer(s, docGRPCServer)
@@ -191,8 +212,11 @@ func main() {
 	// API v1
 	v1 := router.Group("/api/v1")
 	{
-		// TODO: подключить auth middleware после интеграции с Gateway
-		v1.POST("/documents", docHandler.Create)
+		protected := v1.Group("")
+		protected.Use(authMiddleware.Authenticate())
+		{
+			protected.POST("/documents", docHandler.Create)
+		}
 	}
 
 	// ---------- HTTP server ----------

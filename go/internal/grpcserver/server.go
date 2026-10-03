@@ -17,21 +17,22 @@ type Server struct {
 }
 
 // New создаёт gRPC-сервер с дефолтной цепочкой интерсепторов:
-// recovery → logging → tracing → metrics.
-func New(addr string, logger *zap.Logger, extraOpts ...grpc.ServerOption) *Server {
-	defaultOpts := []grpc.ServerOption{
-		grpc.ChainUnaryInterceptor(
-			RecoveryInterceptor(logger),
-			LoggingInterceptor(logger),
-			TracingInterceptor(),
-			MetricsInterceptor(),
-		),
+// recovery → logging → tracing → metrics → [extra interceptors].
+func New(
+	addr string,
+	logger *zap.Logger,
+	extraInterceptors ...grpc.UnaryServerInterceptor,
+) *Server {
+	chain := []grpc.UnaryServerInterceptor{
+		RecoveryInterceptor(logger),
+		LoggingInterceptor(logger),
+		TracingInterceptor(),
+		MetricsInterceptor(),
 	}
-
-	opts := append(defaultOpts, extraOpts...)
+	chain = append(chain, extraInterceptors...)
 
 	return &Server{
-		grpc:   grpc.NewServer(opts...),
+		grpc:   grpc.NewServer(grpc.ChainUnaryInterceptor(chain...)),
 		addr:   addr,
 		logger: logger,
 	}
