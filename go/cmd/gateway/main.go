@@ -19,6 +19,7 @@ import (
 
 	"github.com/I000000/DocuMind/internal/auth"
 	"github.com/I000000/DocuMind/internal/config"
+	gatewayproxy "github.com/I000000/DocuMind/internal/gateway"
 	"github.com/I000000/DocuMind/internal/health"
 	"github.com/I000000/DocuMind/internal/logger"
 	"github.com/I000000/DocuMind/internal/middleware"
@@ -123,6 +124,12 @@ func main() {
 	router.GET("/health/ready", healthHandler.Ready)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
+	// ---------- Upload proxy to document-service ----------
+	uploadProxy, err := gatewayproxy.NewUploadProxy(cfg.GRPC.DocumentServiceURL, log)
+	if err != nil {
+		log.Fatal("failed to create upload proxy", zap.Error(err))
+	}
+
 	// ---------- API v1 ----------
 	v1 := router.Group("/api/v1")
 	{
@@ -135,6 +142,11 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authMiddleware.Authenticate())
 		{
+			protected.POST("/documents",
+				middleware.RequireAnyRole("admin", "editor"),
+				gin.WrapH(uploadProxy),
+			)
+
 			// любой авторизованный
 			protected.GET("/me", func(c *gin.Context) {
 				user := auth.MustUserFromContext(c.Request.Context())

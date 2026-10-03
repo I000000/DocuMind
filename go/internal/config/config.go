@@ -84,6 +84,7 @@ type MinIOConfig struct {
 type GRPCConfig struct {
 	SearchServiceAddr   string `env:"SEARCH_SERVICE_GRPC_ADDR" envDefault:"localhost:50051"`
 	DocumentServiceAddr string `env:"DOCUMENT_SERVICE_GRPC_ADDR" envDefault:"localhost:9090"`
+	DocumentServiceURL  string `env:"DOCUMENT_SERVICE_URL" envDefault:"http://localhost:8082"`
 }
 
 type OTelConfig struct {
